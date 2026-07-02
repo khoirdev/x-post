@@ -1,0 +1,29 @@
+name: Post Approved
+
+on:
+  schedule:
+    - cron: "0 9 * * *"   # 09:00 UTC
+    - cron: "0 14 * * *"  # 14:00 UTC
+    - cron: "0 19 * * *"  # 19:00 UTC
+  workflow_dispatch: {}  # Allow manual trigger
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Post approved
+        env:
+          AI_API: ${{ secrets.AI_API }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          X_AUTH_TOKEN: ${{ secrets.X_AUTH_TOKEN }}
+          X_CTO: ${{ secrets.X_CTO }}
+        run: python post.py
