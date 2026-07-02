@@ -16,7 +16,9 @@ Environment variables (GitHub Actions secrets):
 
 import json
 import os
+import random
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -47,8 +49,8 @@ CONTENT_NICHES = [
 
 # X / Twitter GraphQL endpoint
 X_CREATE_TWEET_URL = (
-    "https://twitter.com/i/api/graphql/"
-    "SoVnbfCycZ7fERGCwpZkYA/CreateTweet"
+    "https://x.com/i/api/graphql/"
+    "oB-5XsA-erG3bgraARPsVA/CreateTweet"
 )
 
 X_PUBLIC_BEARER = (
@@ -155,6 +157,8 @@ def post_to_x(text: str) -> str:
     if not auth_token or not ct0:
         raise EnvironmentError("X_AUTH_TOKEN dan X_CTO harus di-set.")
 
+    client_uuid = str(uuid4())
+
     headers = {
         "authorization": X_PUBLIC_BEARER,
         "x-csrf-token": ct0,
@@ -163,11 +167,24 @@ def post_to_x(text: str) -> str:
         "user-agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
+            "Chrome/125.0.0.0 Safari/537.36"
         ),
         "x-twitter-active-user": "yes",
         "x-twitter-auth-type": "OAuth2Session",
         "x-twitter-client-language": "en",
+        "x-client-uuid": client_uuid,
+        "x-client-transaction-id": client_uuid,
+        "referer": "https://x.com/compose/post",
+        "origin": "https://x.com",
+        "accept": "*/*",
+        "accept-language": "en-US,en;q=0.9",
+        "accept-encoding": "gzip, deflate, br",
+        "sec-ch-ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
     }
 
     payload = {
@@ -176,18 +193,23 @@ def post_to_x(text: str) -> str:
             "dark_request": False,
             "media": {"media_entities": [], "possibly_sensitive": False},
             "semantic_annotation_ids": [],
+            "disallowed_reply_options": None,
         },
         "features": {
-            "tweetypie_unmention_optimization_enabled": True,
+            "communities_web_enable_tweet_community_results_fetch": True,
+            "c9s_tweet_anatomy_moderator_badge_enabled": True,
             "responsive_web_edit_tweet_api_enabled": True,
             "graphql_is_translatable_rweb_tweet_is_translatable_enabled": True,
             "view_counts_everywhere_api_enabled": True,
             "longform_notetweets_consumption_enabled": True,
-            "responsive_web_twitter_article_tweet_consumption_enabled": False,
+            "responsive_web_twitter_article_tweet_consumption_enabled": True,
             "tweet_awards_web_tipping_enabled": False,
+            "creator_subscriptions_quote_tweet_preview_enabled": False,
             "longform_notetweets_rich_text_read_enabled": True,
             "longform_notetweets_inline_media_enabled": True,
+            "articles_preview_enabled": True,
             "rweb_video_timestamps_enabled": True,
+            "rweb_tipjar_consumption_enabled": True,
             "responsive_web_graphql_exclude_directive_enabled": True,
             "verified_phone_label_enabled": False,
             "freedom_of_speech_not_reach_fetch_enabled": True,
@@ -195,11 +217,10 @@ def post_to_x(text: str) -> str:
             "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": True,
             "responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
             "responsive_web_graphql_timeline_navigation_enabled": True,
-            "interactive_text_enabled": True,
-            "responsive_web_text_conversations_enabled": False,
             "responsive_web_enhance_cards_enabled": False,
+            "premium_content_api_read_enabled": False,
         },
-        "queryId": "SoVnbfCycZ7fERGCwpZkYA",
+        "queryId": "oB-5XsA-erG3bgraARPsVA",
     }
 
     resp = requests.post(
@@ -208,10 +229,33 @@ def post_to_x(text: str) -> str:
 
     if resp.status_code != 200:
         raise RuntimeError(
-            f"X API error {resp.status_code}: {resp.text[:400]}"
+            f"X API error {resp.status_code}: {resp.text[:600]}"
         )
 
     data = resp.json()
+
+    # Cek error dari X dalam response body (status 200 tapi ada errors)
+    if "errors" in data:
+        errors = data["errors"]
+        for err in errors:
+            code = err.get("code")
+            msg = err.get("message", "")
+            if code == 226:
+                raise RuntimeError(
+                    f"[Error 226] X mendeteksi aktivitas otomatis.\n"
+                    f"Kemungkinan penyebab:\n"
+                    f"  1. Cookie X_AUTH_TOKEN / X_CTO sudah expired — perbarui dari browser.\n"
+                    f"  2. Akun belum verifikasi nomor HP di x.com/settings/phone.\n"
+                    f"  3. Akun terlalu baru atau posting terlalu sering.\n"
+                    f"Pesan asli: {msg}"
+                )
+            elif code == 32:
+                raise RuntimeError(
+                    f"[Error 32] Autentikasi gagal — X_AUTH_TOKEN atau X_CTO salah/expired.\n"
+                    f"Perbarui cookie dari browser dan update GitHub Secrets."
+                )
+        raise RuntimeError(f"X API errors: {json.dumps(errors)[:400]}")
+
     try:
         tweet_id = (
             data["data"]["create_tweet"]["tweet_results"]["result"]["rest_id"]
