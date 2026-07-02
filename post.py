@@ -29,7 +29,7 @@ import requests
 
 LOG_FILE = Path("posted_log.json")
 
-AI_MODEL = "@cf/meta/llama-3-8b-instruct"
+AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 
 # Niche/kategori konten — ganti sesuai brand/persona akun-mu
 CONTENT_NICHES = [
